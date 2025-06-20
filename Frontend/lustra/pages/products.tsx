@@ -1,87 +1,103 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import products from '../products_item/products.json';
-import Header from '../components/Header';
 import Footer from '../components/Footer';
+import { productService } from '../services/productService';
+import { Product } from '../services/productService';
 
 const Products = () => {
   const [selectedCategory, setSelectedCategory] = useState('');
-  const [filteredProducts, setFilteredProducts] = useState(products);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Group products by category
-  const groupedProducts = products.reduce((acc, product) => {
-    if (!acc[product.category]) {
-      acc[product.category] = [];
-    }
-    acc[product.category].push(product);
-    return acc;
-  }, {} as { [key: string]: any[] });
+  useEffect(() => {
+    const fetchProducts = async () => {
+      try {
+        setLoading(true);
+        const data = await productService.getAll();
+        setProducts(data);
+        setError(null);
+      } catch (err) {
+        setError('Failed to fetch products');
+        console.error('Error fetching products:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchProducts();
+  }, []);
 
   // Filter products based on selected category
-  useEffect(() => {
-    if (selectedCategory) {
-      setFilteredProducts(products.filter(product => product.category.toLowerCase() === selectedCategory.toLowerCase()));
-    } else {
-      setFilteredProducts(products);
-    }
-  }, [selectedCategory]);
+  const filteredProducts = selectedCategory 
+    ? products.filter(product => product.category.toLowerCase() === selectedCategory.toLowerCase())
+    : products;
+
+  // Group products by category
+  const categories = Array.from(new Set(products.map(p => p.category)));
 
   const handleCategorySelect = (category: string) => {
     setSelectedCategory(category);
   };
 
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900"></div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center">
+        <div className="text-red-500">{error}</div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-white">
-      <Header />
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <h1 className="text-4xl font-bold text-gray-800 mb-8">Our Products</h1>
         
         {/* Category Filter */}
         <div className="mb-8">
-          <div className="flex flex-wrap gap-4">
-            <button
-              onClick={() => handleCategorySelect('')}
-              className={`px-4 py-2 rounded-full text-gray-700 hover:bg-gray-50 transition-colors duration-200 ${
-                !selectedCategory ? 'bg-pastel-blue text-gray-800' : 'bg-white border border-gray-200'
-              }`}
-            >
-              All Products
-            </button>
-            {Object.keys(groupedProducts).map((category) => (
-              <button
-                key={category}
-                onClick={() => handleCategorySelect(category)}
-                className={`px-4 py-2 rounded-full text-gray-700 hover:bg-gray-50 transition-colors duration-200 ${
-                  selectedCategory === category ? 'bg-pastel-blue text-gray-800' : 'bg-white border border-gray-200'
-                }`}
-              >
+          <select
+            value={selectedCategory}
+            onChange={(e) => handleCategorySelect(e.target.value)}
+            className="px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">All Categories</option>
+            {categories.map((category) => (
+              <option key={category} value={category}>
                 {category}
-              </button>
+              </option>
             ))}
-          </div>
+          </select>
         </div>
 
-        {/* Products Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
           {filteredProducts.map((product) => (
-            <div key={product.id} className="bg-white rounded-2xl shadow-lg hover:shadow-2xl transition-shadow duration-300">
-              <div className="relative h-64 w-full">
+            <div key={product.id} className="bg-white rounded-lg shadow-md overflow-hidden">
+              <div className="aspect-w-1 aspect-h-1 bg-gray-200">
                 <img
                   src={product.imageUrl}
                   alt={product.name}
-                  className="object-cover w-full h-full rounded-t-2xl"
+                  className="object-cover w-full h-full"
                 />
               </div>
-              <div className="p-6 border-t border-gray-100">
-                <h3 className="text-lg font-semibold text-gray-800 tracking-tight text-center mb-2">{product.name}</h3>
-                <p className="text-md text-gray-500 font-medium text-center mb-2">${product.price.toFixed(2)}</p>
-                <p className="text-sm text-gray-500 text-center mb-4">{product.category}</p>
-                <Link
-                  href={`/products/${product.id}`}
-                  className="inline-block w-full text-center bg-pastel-blue hover:bg-pastel-mint text-gray-800 font-medium py-3 rounded-2xl transition-colors duration-200 shadow focus:outline-none focus:ring-2 focus:ring-pastel-blue"
-                >
-                  View Details
-                </Link>
+              <div className="p-4">
+                <h3 className="text-lg font-semibold text-gray-900">{product.name}</h3>
+                <p className="mt-1 text-sm text-gray-500">{product.category}</p>
+                <p className="mt-2 text-xl font-bold text-gray-900">${product.price}</p>
+                <div className="mt-4">
+                  <Link
+                    href={`/products/${product.id}`}
+                    className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                  >
+                    View Details
+                  </Link>
+                </div>
               </div>
             </div>
           ))}

@@ -1,14 +1,29 @@
 import NextAuth from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
-import bcrypt from 'bcryptjs';
+import axios from 'axios';
+import { DefaultSession } from 'next-auth';
+import { GetServerSidePropsContext } from 'next';
 
-const users = [
-  {
-    id: 1,
-    email: 'test@example.com',
-    password: '$2a$10$G5v6uQZyX7x9qY8z9p0eFuwQZyX7x9qY8z9p0eFuwQZyX7x9qY8z9' // password: 'test123'
+declare module 'next-auth' {
+  interface User {
+    token: string;
   }
-];
+  interface Session {
+    user: {
+      accessToken: string;
+      email: string;
+      id: string;
+    } & DefaultSession["user"];
+  }
+}
+
+declare module 'next-auth/jwt' {
+  interface JWT {
+    accessToken: string;
+    email: string;
+    id: string;
+  }
+}
 
 export default NextAuth({
   providers: [
@@ -18,28 +33,33 @@ export default NextAuth({
         email: { label: "Email", type: "email" },
         password: {  label: "Password", type: "password" }
       },
-      async authorize(credentials, req) {
+      async authorize(credentials: Record<"email" | "password", string> | undefined, req: { headers?: Record<string, string | string[]> }) {
         if (!credentials?.email || !credentials?.password) {
           throw new Error('Invalid credentials');
         }
 
-        const user = users.find(u => u.email === credentials.email);
+        try {
+          const response = await axios.post(
+            `${process.env.NEXT_PUBLIC_API_URL}/api/auth/login`,
+            {
+              email: credentials.email,
+              password: credentials.password
+            }
+          );
 
-        if (!user) {
-          throw new Error('No user found');
+          if (response.data.token) {
+            return {
+              id: response.data.user.id,
+              email: response.data.user.email,
+              name: response.data.user.name,
+              token: response.data.token
+            };
+          }
+
+          return null;
+        } catch (error) {
+          return null;
         }
-
-        const isPasswordValid = await bcrypt.compare(credentials.password, user.password);
-
-        if (!isPasswordValid) {
-          throw new Error('Invalid password');
-        }
-
-        // Convert id to string to match NextAuth's User type
-        return {
-          id: user.id.toString(),
-          email: user.email
-        };
       }
     })
   ],
@@ -49,7 +69,26 @@ export default NextAuth({
     error: '/auth/error',
   },
   session: {
-    strategy: "jwt",
+    strategy: 'jwt',
+    maxAge: 30 * 24 * 60 * 60, // 30 days
   },
-  secret: process.env.NEXTAUTH_SECRET || 'your-secret-key',
+  callbacks: {
+    async jwt({ token, user }) {
+      if (user) {
+        token.accessToken = user.token || '';
+        token.email = user.email || '';
+        token.id = user.id || '';
+      }
+      return token;
+    },
+    async session({ session, token }) {
+      if (token) {
+        session.user.accessToken = token.accessToken;
+        session.user.email = token.email;
+        session.user.id = token.id;
+      }
+      return session;
+    },
+  },
+  secret: process.env.NEXTAUTH_SECRET
 });
